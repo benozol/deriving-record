@@ -52,21 +52,18 @@ module Aux (Description : Defs.ClassDescription) (Loc : Defs.Loc) = struct
 
   let record names =
     let fields =
-      Ast.rbSem_of_list @
-        flip List.map names @ fun name ->
-          <:rec_binding< $lid:name$ = $lid:name$ >>
+      flip List.map names @ fun name ->
+        <:rec_binding< $lid:name$ = $lid:name$ >>
     in
     <:expr<
-      { $fields$ }
+      { $Ast.rbSem_of_list fields$ }
     >>
 
   let record_fun names initial =
     let folder name sofar =
       <:expr< fun ~ $lid:name$ -> $sofar$ >>
     in
-    <:expr<
-      $List.fold_right folder names initial$
-    >>
+    List.fold_right folder names initial
 
   let for_record classname f : Pa_deriving_common.Type.decl list -> Camlp4.PreCast.Ast.str_item =
     let for_decl = function
@@ -155,8 +152,8 @@ module Record = struct
           module $uid:"Record_"^cname$ = struct
             $Ast.stSem_of_list [
               type_a cname ; type_record_fun ; val_record ;
-                type_field ; type_any_field ; val_fields ; val_get ]$
-
+              type_field ; type_any_field ; val_fields ;
+              val_get ]$
           end
         >>
 
@@ -202,12 +199,11 @@ module Functor = struct
         let module_make =
           let type_t =
             let fields =
-              Ast.record_type_of_list @
-                flip2 List.map2 names f_types @ fun name typ ->
-                  _loc, name, false, typ
+              flip2 List.map2 names f_types @ fun name typ ->
+                _loc, name, false, typ
             in
             <:str_item<
-              type t = { $fields$ }
+              type t = { $Ast.record_type_of_list fields$ }
             >>
           in
           let type_f =
@@ -249,14 +245,16 @@ module Functor = struct
                 <:match_case< $uid:"Record_"^cname$.$uid:upper_name$ -> record . $lid:name$ >>
             in
             <:str_item<
-              let get (type x) record : x $uid:"Record_"^cname$.field -> x F.t = function $Ast.mcOr_of_list cases$
+              let get (type x) record : x $uid:"Record_"^cname$.field -> x F.t =
+                function $Ast.mcOr_of_list cases$
             >>
           in
           <:str_item<
             module Make (F : Deriving_Record.T) = struct
-              $Ast.stSem_of_list [ type_t ; type_f ; val_get ;
-                                   type_record_fun ; val_record_fun ;
-                                   type_field_init ; val_init ]$
+              $Ast.stSem_of_list
+                [ type_t ; type_f ; val_get ;
+                  type_record_fun ; val_record_fun ;
+                  type_field_init ; val_init ]$
             end
           >>
         in
@@ -270,19 +268,24 @@ module Functor = struct
             >>
           in
           <:str_item<
-            module Map (Domain : Deriving_Record.Functor.S with type 'a field = 'a $uid:"Record_"^cname$.field)
-              (Codomain : Deriving_Record.Functor.S with type a = Domain.a and type 'a field = 'a $uid:"Record_"^cname$.field) =
+            module Map (Domain : Deriving_Record.Codomain with type 'a field = 'a $uid:"Record_"^cname$.field)
+              (Codomain : Deriving_Record.Codomain with type a = Domain.a and type 'a field = 'a $uid:"Record_"^cname$.field) =
             struct
               type field_map = { field_map : 'a . 'a Domain.f -> 'a $uid:"Record_"^cname$.field -> 'a Codomain.f }
               let map = $map_expr$
             end
           >>
         in
+        let type_field =
+          <:str_item<
+            type 'a field = 'a $uid:"Record_"^cname$.field ;;
+          >>
+        in
         <:str_item<
           module $uid:"Functor_"^cname$ = struct
-            $type_a cname$ ;;
-            type 'a field = 'a $uid:"Record_"^cname$.field ;;
-            $Ast.stSem_of_list [ module_make ; module_map ]$
+            $Ast.stSem_of_list
+              [ type_a cname ; type_field ;
+                module_make ; module_map ]$
           end
         >>
 
@@ -292,144 +295,3 @@ module Functor = struct
   module Functor = Base.Register (Description) (Builder)
 
 end
-
-(* module Builder (Loc : Defs.Loc) = struct *)
-
-(*   module Helpers = Base.AstHelpers(Loc) *)
-(*   module Generator = Base.Generator(Loc)(Description) *)
-
-(*   open Loc *)
-(*   open Camlp4.PreCast *)
-(*   open Description *)
-
-(*   let for_sum variants cname names = *)
-(*     let lower_names = List.map String.lowercase names in *)
-(*     let cols vars = *)
-(*       let f name var = *)
-(*         Ast.TyCol (_loc, <:ctyp< $lid:name$ >>, <:ctyp< '$var$ >>) *)
-(*       in *)
-(*       Ast.tySem_of_list @ *)
-(*         List.map2 f lower_names vars *)
-(*     in *)
-(*     let res = <:ctyp< 'res >> in *)
-(*     let record = *)
-(*       let ctyp = *)
-(*         Ast.record_type_of_list @ *)
-(*           flip List.map lower_names @ fun name -> *)
-(*             _loc, name, false, <:ctyp< '$name$ >> *)
-(*       in *)
-(*       <:str_item< type record 'a = { $ctyp$ } constraint 'a = < $cols lower_names$ > >> *)
-(*     in *)
-(*     let record_fun_type = *)
-(*       let ctyp = *)
-(*         let label name sofar = *)
-(*           <:ctyp< $lid:name$:'$name$ -> $sofar$ >> *)
-(*         in *)
-(*         List.fold_right label lower_names res *)
-(*       in *)
-(*       <:str_item< type record_fun 'a $res$ = ('a record -> 'res) -> $ctyp$ constraint 'a = < $cols lower_names$ > >> *)
-(*     in *)
-(*     let mono = *)
-(*       let aaa = *)
-(*         Array.to_list @ *)
-(*           Array.make (List.length names) "a" *)
-(*       in *)
-(*       <:str_item< type 'a mono = < $cols aaa$ > record >> *)
-(*     in *)
-(*     let record_fun = *)
-(*       let folder name sofar = *)
-(*         <:expr< fun ~ $lid:String.lowercase name$ -> $sofar$ >> *)
-(*       in *)
-(*       let fields = *)
-(*         Ast.rbSem_of_list @ *)
-(*           flip List.map lower_names @ fun name -> *)
-(*             <:rec_binding< $lid:name$ = $lid:name$ >> *)
-(*       in *)
-(*       let expr = *)
-(*         List.fold_right folder lower_names <:expr< k { $fields$ } >> *)
-(*       in *)
-(*       <:str_item< let record k = $expr$ >> *)
-(*     in *)
-(*     let get_fun = *)
-(*       let cases = *)
-(*         flip List.map names @ fun name -> *)
-(*           let pattern = *)
-(*             match variants with *)
-(*               | `Variant -> <:patt< `$name$ >> *)
-(*               | `Sum -> <:patt< $uid:name$ >> *)
-(*           in *)
-(*           <:match_case< $pattern$ -> record . $lid:String.lowercase name$ >> *)
-(*       in *)
-(*       <:str_item< let get record = function $Ast.mcOr_of_list cases$ >> *)
-(*     in *)
-(*     <:str_item< *)
-(*       module $uid:"Record_"^cname$ = struct *)
-(*         $Ast.stSem_of_list [ record ; record_fun_type ; record_fun ; mono ; get_fun ]$ *)
-(*       end *)
-(*     >> *)
-
-(*   let for_record ~cname ~params ~fields ~constraints ~bool = *)
-(*     let funct = *)
-(*       let decl : Type.decl = *)
-(*         let fields' = *)
-(*           flip List.map fields @ fun (name, (params, expr), mutability) -> *)
-(*             let expr' = *)
-(*               `Constr (["F";"t"], [ expr ]) *)
-(*             in *)
-(*             name, (params, expr'), mutability *)
-(*         in *)
-(*         "t", params, `Fresh (None, Type.Record fields', `Public), constraints, bool *)
-(*       in *)
-(*       <:str_item< *)
-(*         module Functor (F : sig type 'a t end) = struct *)
-(*           type $Helpers.Untranslate.decl decl$ *)
-(*         end *)
-(*       >> *)
-(*     in *)
-(*     let alias : Type.decl = *)
-(*       let expr : Type.rhs = *)
-(*         let params' : Type.expr list = List.map (fun param -> `Param param) params in *)
-(*         `Expr (`Constr ([cname], params')) *)
-(*       in *)
-(*       "a", params, expr, [], bool *)
-(*     in *)
-(*     <:str_item< *)
-(*       module $uid:"Record_"^cname$ = struct *)
-(*         type $Helpers.Untranslate.decl alias$ *)
-(*         $funct$ *)
-(*       end *)
-(*     >> *)
-(*   let generate = *)
-(*     let for_decl : Type.decl -> Ast.str_item = function *)
-(*       | cname, _, `Variant (_, tags), _, _ -> *)
-(*         let names = *)
-(*           flip List.map tags @ function *)
-(*             | Type.Tag (name, []) -> name *)
-(*             | Type.Tag (name, _) -> *)
-(*               raise @ Base.Underivable (classname^" cannot be derived because the tag "^name^" is not nullary") *)
-(*             | Type.Extends _ -> *)
-(*               raise @ Base.Underivable (classname^" cannot be derived from variant extension") *)
-(*         in *)
-(*         for_sum `Variant cname names *)
-(*       | cname, _, `Fresh (_, Type.Sum summands, _), _, _ -> *)
-(*         let names = *)
-(*           flip List.map summands @ function *)
-(*             | (name, []) -> name *)
-(*             | (name, _::_) -> *)
-(*               raise @ Base.Underivable (classname^" cannot be derived because the tag "^name^" is not nullary") *)
-(*         in *)
-(*         for_sum `Sum cname names *)
-(*       | cname, params, `Fresh (_, Type.Record fields, _), constraints, bool -> *)
-(*         for_record ~cname ~params ~fields ~constraints ~bool *)
-(*       | _ -> *)
-(*         raise @ Base.Underivable (classname^" only derivible for nullary polymorphic variants") *)
-(*     in *)
-(*     fun decls -> *)
-(*       Ast.stSem_of_list *)
-(*         (List.map for_decl decls) *)
-
-(*   let generate_sigs _ = <:sig_item< >> *)
-
-(* end *)
-
-(* module Record = Base.Register (Description) (Builder) *)
