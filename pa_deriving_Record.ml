@@ -10,6 +10,8 @@ let flip2 f x y z = f z x y
 
 module Aux (Description : Defs.ClassDescription) (Loc : Defs.Loc) = struct
 
+  module Helpers = Base.AstHelpers(Loc)
+
   open Loc
   open Camlp4.PreCast
   open Description
@@ -31,6 +33,7 @@ module Aux (Description : Defs.ClassDescription) (Loc : Defs.Loc) = struct
     <:ctyp< 'res >>
 
   let k = "k"
+  let record_lid = "record"
   let lid_pattern x = <:patt< $lid:x$ >>
   let lid_expr x = <:expr< $lid:x$ >>
 
@@ -89,10 +92,8 @@ module Record = struct
 
   module Builder (Loc : Defs.Loc) = struct
 
-    module Helpers = Base.AstHelpers(Loc)
-    module Generator = Base.Generator(Loc)(Description)
-
     include Aux (Description) (Loc)
+    module Generator = Base.Generator(Loc)(Description)
 
     open Loc
     open Camlp4.PreCast
@@ -101,59 +102,54 @@ module Record = struct
     let generate =
       for_record classname @ fun ~cname ~params ~fields ~constraints ->
         let names, types = names_types fields in
-        let upper_names = List.map String.uppercase names in
-        let type_record_fun =
-          let types = List.map Helpers.Untranslate.expr types in
-          <:str_item<
-            type 'res record_fun = $record_fun_types names types res$
-          >>
-        in
-        let val_record =
-          let k_res = <:expr< $lid_expr k$ $record names$ >> in
-          <:str_item<
-            let record $lid_pattern k$ = $record_fun names k_res$
-          >>
-        in
-        let type_field =
+        let upper_names = List.map String.capitalize names in
+        let ast_types = List.map Helpers.Untranslate.expr types in
+        let field_variants =
           let variants =
             flip2 List.map2 upper_names types @ fun name typ ->
               Ast.(TyCol (_loc,
                           TyId (_loc, IdUid (_loc, name)),
                           <:ctyp< $Helpers.Untranslate.expr typ$ field >>))
           in
-          <:str_item<
-            type _ field = $Ast.TySum (_loc, Ast.tyOr_of_list variants)$
+          Ast.TySum (_loc, Ast.tyOr_of_list variants)
+        in
+        let any_field_variant =
+          <:ctyp<
+            | Any_field : _ field -> any_field
           >>
         in
-        let type_any_field =
-          <:str_item<
-            type any_field = Any_field : _ field -> any_field
-          >>
+        let val_get_cases record =
+          flip2 List.map2 names upper_names @ fun name upper_name ->
+            <:match_case< $uid:upper_name$ -> $record$.$lid:name$ >>
         in
-        let val_get =
-          let cases =
-            flip2 List.map2 names upper_names @ fun name upper_name ->
-              <:match_case< $uid:upper_name$ -> record.$lid:name$ >>
-          in
-          <:str_item<
-            let get record (type x) : x field -> x = function $Ast.mcOr_of_list cases$
-          >>
+        let field_exprs =
+          flip List.map upper_names @ fun upper_name ->
+            <:expr< Any_field $uid:upper_name$ >>
         in
-        let val_fields =
-          let exprs =
-            flip List.map upper_names @ fun upper_name ->
-              <:expr< Any_field $uid:upper_name$ >>
-          in
-          <:str_item<
-            let fields = $Helpers.expr_list exprs$
+        (* let with_constr = *)
+        (*   <:with_constr< *)
+        (*     type a = $lid:cname$ and *)
+        (*     type 'res record_fun = $record_fun_types names ast_types res$ *)
+        (*   >> *)
+        (* in *)
+        let k_res = <:expr< $lid_expr k$ $record names$ >> in
+        let get_fun =
+          <:expr<
+            fun field $lid_pattern record_lid$ ->
+              match field with
+                | $Ast.mcOr_of_list (val_get_cases (lid_expr record_lid))$
           >>
         in
         <:str_item<
-          module $uid:"Record_"^cname$ = struct
-            $Ast.stSem_of_list [
-              type_a cname ; type_record_fun ; val_record ;
-              type_field ; type_any_field ; val_fields ;
-              val_get ]$
+          module $uid:"Record_"^cname$ (* : Deriving_Record.Record with $with_constr$ *) =
+          struct
+            type a = $lid:cname$
+            type record_fun $res$ = $record_fun_types names ast_types res$ ;;
+            type _ field = $field_variants$
+            type any_field = $any_field_variant$
+            let record $lid_pattern k$ = $record_fun names k_res$
+            let fields = $Helpers.expr_list field_exprs$
+            let get : type f . f field -> a -> f = $get_fun$
           end
         >>
 
@@ -179,7 +175,6 @@ module Functor = struct
 
   module Builder (Loc : Defs.Loc) = struct
 
-    module Helpers = Base.AstHelpers(Loc)
     module Generator = Base.Generator(Loc)(Description)
 
     include Aux (Description) (Loc)
@@ -191,101 +186,83 @@ module Functor = struct
     let generate =
       for_record classname @ fun ~cname ~params ~fields ~constraints ->
         let names, types = names_types fields in
-        let upper_names = List.map String.uppercase names in
+        let upper_names = List.map String.capitalize names in
         let f_types =
           flip List.map types @ fun typ ->
             <:ctyp< $Helpers.Untranslate.expr typ$ F.t >>
         in
-        let module_make =
-          let type_t =
-            let fields =
+        let type_t =
+          let fields =
+            Ast.record_type_of_list @
               flip2 List.map2 names f_types @ fun name typ ->
                 _loc, name, false, typ
-            in
-            <:str_item<
-              type t = { $Ast.record_type_of_list fields$ }
-            >>
           in
-          let type_f =
-            <:str_item<
-              type 'a f = 'a F.t
-            >>
-          in
-          let type_record_fun =
-            <:str_item<
-              type 'res record_fun = $record_fun_types names f_types res$
-            >>
-          in
-          let val_record_fun =
-            let k_res = <:expr< $lid_expr k$ $record names$ >> in
-            <:str_item<
-              let record $lid_pattern k$ = $record_fun names k_res$
-            >>
-          in
-          let type_field_init =
-            <:str_item<
-              type field_init = { field_init : 'a . 'a $uid:"Record_"^cname$.field -> 'a F.t }
-            >>
-          in
-          let val_init =
-            let fields =
-              Ast.rbSem_of_list @
-                flip2 List.map2 names upper_names @ fun name upper_name ->
-                  <:rec_binding<
-                    $lid:name$ = f.field_init $id:field_variant cname upper_name$
-                  >>
-            in
-            <:str_item<
-              let init f = { $fields$ }
-            >>
-          in
-          let val_get =
-            let cases =
-              flip2 List.map2 upper_names names @ fun upper_name name ->
-                <:match_case< $uid:"Record_"^cname$.$uid:upper_name$ -> record . $lid:name$ >>
-            in
-            <:str_item<
-              let get (type x) record : x $uid:"Record_"^cname$.field -> x F.t =
-                function $Ast.mcOr_of_list cases$
-            >>
-          in
-          <:str_item<
-            module Make (F : Deriving_Record.T) = struct
-              $Ast.stSem_of_list
-                [ type_t ; type_f ; val_get ;
-                  type_record_fun ; val_record_fun ;
-                  type_field_init ; val_init ]$
-            end
+          <:ctyp< { $fields$ } >>
+        in
+        let record_fun_expr =
+          let k_res = <:expr< $lid_expr k$ $record names$ >> in
+          <:expr<
+            fun $lid_pattern k$ -> $record_fun names k_res$
           >>
         in
-        let module_map =
-          let map_expr =
-            <:expr<
-              fun field_map record ->
-                Codomain.init
-                  { Codomain.field_init = fun field ->
-                      field_map.field_map (Domain.get record field) field }
-            >>
+        let type_init_field =
+          <:ctyp<
+            { init_field : 'a . 'a $uid:"Record_"^cname$.field -> 'a F.t }
+          >>
+        in
+        let init_expr =
+          let fields =
+            Ast.rbSem_of_list @
+              flip2 List.map2 names upper_names @ fun name upper_name ->
+                <:rec_binding<
+                  $lid:name$ = init_field.init_field $id:field_variant cname upper_name$
+                >>
           in
-          <:str_item<
-            module Map (Domain : Deriving_Record.Codomain with type 'a field = 'a $uid:"Record_"^cname$.field)
-              (Codomain : Deriving_Record.Codomain with type a = Domain.a and type 'a field = 'a $uid:"Record_"^cname$.field) =
-            struct
-              type field_map = { field_map : 'a . 'a Domain.f -> 'a $uid:"Record_"^cname$.field -> 'a Codomain.f }
-              let map = $map_expr$
-            end
+          <:expr<
+            fun init_field -> { $fields$ }
           >>
         in
-        let type_field =
-          <:str_item<
-            type 'a field = 'a $uid:"Record_"^cname$.field ;;
+        let get_expr =
+          let cases =
+            flip2 List.map2 upper_names names @ fun upper_name name ->
+              <:match_case< $uid:"Record_"^cname$.$uid:upper_name$ -> record . $lid:name$ >>
+          in
+          <:expr<
+            fun field record ->
+              match field with
+                | $Ast.mcOr_of_list cases$
           >>
         in
+        (* let with_constr = *)
+        (*   <:with_constr< *)
+        (*     type t = $type_t$ and *)
+        (*     type 'a f = 'a F.t and *)
+        (*     type 'res record_fun = $record_fun_types names f_types res$ and *)
+        (*     type init_field = $type_init_field$ *)
+        (*   >> *)
+        (* in *)
         <:str_item<
           module $uid:"Functor_"^cname$ = struct
-            $Ast.stSem_of_list
-              [ type_a cname ; type_field ;
-                module_make ; module_map ]$
+            type a = $lid:cname$
+            type 'a field = 'a $uid:"Record_"^cname$.field
+            module Make (F : Deriving_Record.T) = struct
+              type a = $lid:cname$
+              type t = $type_t$
+              type 'a f = 'a F.t
+              type 'a field = 'a $uid:"Record_"^cname$.field
+              type record_fun $res$ = $record_fun_types names f_types res$
+              type init_field = $type_init_field$
+              let record = $record_fun_expr$
+              let init = $init_expr$
+              let get : type x . x field -> t -> x f = $get_expr$
+            end
+            module Identity = struct
+                include Make (struct type 'a t = 'a end)
+                let import record =
+                  init
+                    { init_field = fun field ->
+                        $uid:"Record_"^cname$.get field record }
+            end
           end
         >>
 
