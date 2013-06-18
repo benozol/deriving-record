@@ -7,7 +7,7 @@ clean:
 	rm *.cmo *.cmi
 
 install:
-	ocamlfind install deriving-record META deriving_Record.cmo pa_deriving_Record.cmo
+	ocamlfind install deriving-record META deriving_Record.cmi deriving_Record.cmo pa_deriving_Record.cmo
 
 uninstall:
 	ocamlfind remove deriving-record

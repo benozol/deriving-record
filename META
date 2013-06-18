@@ -1,6 +1,8 @@
 names = "deriving-record"
 version = "0.1"
 description = "Deriving meta information on record"
-requires(syntax) = "deriving-ocsigen.syntax"
-archive(preprocessor,syntax) = "pa_deriving_Record.cmo"
 archive(byte) = "deriving_Record.cmo"
+package "syntax" (
+  requires(syntax) = "deriving-ocsigen.syntax"
+  archive(preprocessor,syntax) = "pa_deriving_Record.cmo"
+)
