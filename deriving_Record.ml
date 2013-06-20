@@ -55,9 +55,10 @@ module Functor = struct
               map_field.map_field field (Domain.get field record) }
   end
 
-  module Import (Record : Record) (Functor : Functor with type a = Record.a and type 'a field = 'a Record.field) :
+  module Exchange (Record : Record) (Functor : Functor with type a = Record.a and type 'a field = 'a Record.field) :
   sig
     val import : Record.a -> Functor.Make (Identity).t
+    val export : Functor.Make (Identity).t -> Record.a
   end =
   struct
     module Identity = Functor.Make (Identity)
@@ -65,5 +66,9 @@ module Functor = struct
       Identity.init
         { Identity.init_field = fun field ->
             Record.get field record }
+    let export record =
+      Record.init
+        { Record.init_field = fun field ->
+            Identity.get field record }
   end
 end
