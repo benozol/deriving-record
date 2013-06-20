@@ -11,6 +11,8 @@ module type Record = sig
   type any_field = Any_field : _ field -> any_field
   val get : 'a field -> a -> 'a
   val fields : any_field list
+  type init_field = { init_field : 'a . 'a field -> 'a }
+  val init : init_field -> a
 end
 
 module Identity = struct

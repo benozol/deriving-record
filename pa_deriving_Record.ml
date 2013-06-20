@@ -62,6 +62,15 @@ module Aux (Description : Defs.ClassDescription) (Loc : Defs.Loc) = struct
       { $Ast.rbSem_of_list fields$ }
     >>
 
+  let record' names exprs =
+    let fields =
+      flip2 List.map2 names exprs @ fun name expr ->
+        <:rec_binding< $lid:name$ = $expr$ >>
+    in
+    <:expr<
+      { $Ast.rbSem_of_list fields$ }
+    >>
+
   let record_fun names initial =
     let folder name sofar =
       <:expr< fun ~ $lid:name$ -> $sofar$ >>
@@ -140,6 +149,17 @@ module Record = struct
                 | $Ast.mcOr_of_list (val_get_cases (lid_expr record_lid))$
           >>
         in
+        let init_expr =
+          let exprs =
+            flip List.map upper_names @ fun upper_name ->
+              <:expr<
+                init_field.init_field $uid:upper_name$
+              >>
+          in
+          <:expr<
+            fun init_field -> $record' names exprs$
+          >>
+        in
         <:str_item<
           module $uid:"Record_"^cname$ (* : Deriving_Record.Record with $with_constr$ *) =
           struct
@@ -150,6 +170,8 @@ module Record = struct
             let record $lid_pattern k$ = $record_fun names k_res$
             let fields = $Helpers.expr_list field_exprs$
             let get : type f . f field -> a -> f = $get_fun$
+            type init_field = { init_field : 'a . 'a field -> 'a }
+            let init = $init_expr$
           end
         >>
 
