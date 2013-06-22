@@ -11,6 +11,7 @@ module type Record = sig
   type any_field = Any_field : _ field -> any_field
   val get : 'a field -> a -> 'a
   val fields : any_field list
+  val distribute : a -> 'res record_fun -> 'res
 end
 
 module Identity = struct
@@ -29,6 +30,7 @@ module Functor = struct
     type init_field = { init_field : 'a . 'a field -> 'a f }
     val init : init_field -> t
     val get : 'a field -> t -> 'a f
+    val distribute : t -> 'res record_fun -> 'res
   end
 
   module type Functor = sig
