@@ -77,6 +77,25 @@ module Aux (Description : Defs.ClassDescription) (Loc : Defs.Loc) = struct
     in
     List.fold_right folder names initial
 
+
+  let distribute_expr accessor names upper_names =
+    let f = "f" in
+    let record = "record" in
+    let distribute f_expr names exprs =
+      let aux sofar name expr =
+        <:expr< $sofar$ $Ast.ExLab (_loc, name, expr)$ >>
+      in
+      List.fold_left2 aux f_expr names exprs
+    in
+    let exprs =
+      flip List.map upper_names @ fun upper_name ->
+        <:expr< get $accessor upper_name$ $lid:record$ >>
+    in
+    <:expr<
+      fun $lid_pattern record$ $lid_pattern f$ ->
+        $distribute (lid_expr f) names exprs$
+    >>
+
   let for_record classname f : Pa_deriving_common.Type.decl list -> Camlp4.PreCast.Ast.str_item =
     let for_decl = function
       | cname, params, `Fresh (_, Type.Record fields, _), constraints, _  ->
@@ -160,6 +179,7 @@ module Record = struct
             fun init_field -> $record' names exprs$
           >>
         in
+        let accessor field = <:expr< $uid:field$ >> in
         <:str_item<
           module $uid:"Record_"^cname$ (* : Deriving_Record.Record with $with_constr$ *) =
           struct
@@ -172,6 +192,7 @@ module Record = struct
             let get : type f . f field -> a -> f = $get_fun$
             type init_field = { init_field : 'a . 'a field -> 'a }
             let init = $init_expr$
+            let distribute = $distribute_expr accessor names upper_names$
           end
         >>
 
@@ -255,14 +276,7 @@ module Functor = struct
                 | $Ast.mcOr_of_list cases$
           >>
         in
-        (* let with_constr = *)
-        (*   <:with_constr< *)
-        (*     type t = $type_t$ and *)
-        (*     type 'a f = 'a F.t and *)
-        (*     type 'res record_fun = $record_fun_types names f_types res$ and *)
-        (*     type init_field = $type_init_field$ *)
-        (*   >> *)
-        (* in *)
+        let accessor field = <:expr< $uid:"Record_"^cname$.$uid:field$ >> in
         <:str_item<
           module $uid:"Functor_"^cname$ = struct
             type a = $lid:cname$
@@ -277,13 +291,8 @@ module Functor = struct
               let record = $record_fun_expr$
               let init = $init_expr$
               let get : type x . x field -> t -> x f = $get_expr$
-            end
-            module Identity = struct
-                include Make (struct type 'a t = 'a end)
-                let import record =
-                  init
-                    { init_field = fun field ->
-                        $uid:"Record_"^cname$.get field record }
+              let distribute =
+                $distribute_expr accessor names upper_names$
             end
           end
         >>

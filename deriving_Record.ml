@@ -13,6 +13,7 @@ module type Record = sig
   val fields : any_field list
   type init_field = { init_field : 'a . 'a field -> 'a }
   val init : init_field -> a
+  val distribute : a -> 'res record_fun -> 'res
 end
 
 module Identity = struct
@@ -31,16 +32,13 @@ module Functor = struct
     type init_field = { init_field : 'a . 'a field -> 'a f }
     val init : init_field -> t
     val get : 'a field -> t -> 'a f
+    val distribute : t -> 'res record_fun -> 'res
   end
 
   module type Functor = sig
     type a
     type 'a field
     module Make : functor (F : T) -> S with type a = a and type 'a f = 'a F.t and type 'a field = 'a field
-    module Identity : sig
-      include S with type a = a and type 'a f = 'a and type 'a field = 'a field
-      val import : a -> t
-    end
   end
 
   module Map
