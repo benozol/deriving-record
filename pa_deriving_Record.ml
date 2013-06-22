@@ -233,14 +233,6 @@ module Functor = struct
                 | $Ast.mcOr_of_list cases$
           >>
         in
-        (* let with_constr = *)
-        (*   <:with_constr< *)
-        (*     type t = $type_t$ and *)
-        (*     type 'a f = 'a F.t and *)
-        (*     type 'res record_fun = $record_fun_types names f_types res$ and *)
-        (*     type init_field = $type_init_field$ *)
-        (*   >> *)
-        (* in *)
         <:str_item<
           module $uid:"Functor_"^cname$ = struct
             type a = $lid:cname$
@@ -255,13 +247,6 @@ module Functor = struct
               let record = $record_fun_expr$
               let init = $init_expr$
               let get : type x . x field -> t -> x f = $get_expr$
-            end
-            module Identity = struct
-                include Make (struct type 'a t = 'a end)
-                let import record =
-                  init
-                    { init_field = fun field ->
-                        $uid:"Record_"^cname$.get field record }
             end
           end
         >>

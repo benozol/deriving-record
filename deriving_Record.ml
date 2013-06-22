@@ -35,10 +35,6 @@ module Functor = struct
     type a
     type 'a field
     module Make : functor (F : T) -> S with type a = a and type 'a f = 'a F.t and type 'a field = 'a field
-    module Identity : sig
-      include S with type a = a and type 'a f = 'a and type 'a field = 'a field
-      val import : a -> t
-    end
   end
 
   module Map
