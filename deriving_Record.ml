@@ -8,6 +8,7 @@ module type Record = sig
   type 'res record_fun
   val record : (a -> 'res) -> 'res record_fun
   type 'a field
+  val field_to_string : 'a field -> string
   type any_field = Any_field : _ field -> any_field
   val get : 'a field -> a -> 'a
   val fields : any_field list

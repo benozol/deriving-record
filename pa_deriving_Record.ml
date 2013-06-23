@@ -179,6 +179,17 @@ module Record = struct
             fun init_field -> $record' names exprs$
           >>
         in
+        let field_to_string_exp =
+          let cases =
+            flip2 List.map2 names upper_names @ fun name upper_name ->
+              <:match_case< $uid:upper_name$ -> $str:name$ >>
+          in
+          <:expr<
+            fun (type a) field ->
+              match (field : a field) with
+                | $Ast.mcOr_of_list cases$
+          >>
+        in
         let accessor field = <:expr< $uid:field$ >> in
         <:str_item<
           module $uid:"Record_"^cname$ (* : Deriving_Record.Record with $with_constr$ *) =
@@ -186,6 +197,7 @@ module Record = struct
             type a = $lid:cname$
             type record_fun $res$ = $record_fun_types names ast_types res$ ;;
             type _ field = $field_variants$
+            let field_to_string = $field_to_string_exp$
             type any_field = $any_field_variant$
             let record $lid_pattern k$ = $record_fun names k_res$
             let fields = $Helpers.expr_list field_exprs$
