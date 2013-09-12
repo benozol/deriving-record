@@ -1,11 +1,11 @@
 
 all:
 	ocamlc -c deriving_Record.ml
-	ocamlfind c -c -package camlp4.quotations.o,camlp4.fulllib,deriving-ocsigen -syntax camlp4o pa_deriving_Record.ml
+	ocamlfind c -c -package camlp4.quotations.o,camlp4.fulllib,deriving -syntax camlp4o pa_deriving_Record.ml
 
 
 test:
-	ocamlfind c -c -package deriving-ocsigen.syntax -syntax camlp4o -ppopt pa_deriving.cma -ppopt pa_deriving_Record.cmo test.ml
+	ocamlfind c -c -package deriving.syntax -syntax camlp4o -ppopt pa_deriving.cma -ppopt pa_deriving_Record.cmo test.ml
 
 clean:
 	rm *.cmo *.cmi
@@ -17,4 +17,4 @@ uninstall:
 	ocamlfind remove deriving-record
 
 check:
-	camlp4o `ocamlfind query -i-format deriving-ocsigen.syntax` pa_deriving.cma pa_deriving_Record.cmo -printer o test.ml
+	camlp4o `ocamlfind query -i-format deriving.syntax` pa_deriving.cma pa_deriving_Record.cmo -printer o test.ml

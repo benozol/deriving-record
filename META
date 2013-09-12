@@ -3,6 +3,6 @@ version = "0.1"
 description = "Deriving meta information on record"
 archive(byte) = "deriving_Record.cmo"
 package "syntax" (
-  requires(syntax) = "deriving-ocsigen.syntax"
+  requires(syntax) = "deriving.syntax"
   archive(preprocessor,syntax) = "pa_deriving_Record.cmo"
 )
